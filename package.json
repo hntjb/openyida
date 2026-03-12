@@ -1,0 +1,17 @@
+{
+  "name": "openyida",
+  "version": "0.1.0",
+  "description": "OpenYida CLI - 宜搭命令行工具",
+  "bin": {
+    "yida": "./bin/yida.js"
+  },
+  "keywords": ["yida", "aliwork", "dingtalk", "cli", "openyida"],
+  "author": "OpenYida Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.0.0"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
