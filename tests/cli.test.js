@@ -542,3 +542,296 @@ describe("头像 URL 版本参数修复（Issue #31）", () => {
     });
   });
 });
+
+// ── yida doctor 命令测试 ──────────────────────────────────────────────
+
+describe("yida doctor 命令", () => {
+  test("--help 包含 --repair 选项说明", () => {
+    const { stdout, status } = runCli(["doctor", "--help"]);
+    expect(status).toBe(0);
+    expect(stdout).toContain("--repair");
+    expect(stdout).toContain("自动修复");
+  });
+
+  test("--help 包含示例", () => {
+    const { stdout } = runCli(["doctor", "--help"]);
+    expect(stdout).toContain("示例");
+    expect(stdout).toContain("yida doctor");
+  });
+
+  test("在完整环境下输出所有检查通过", () => {
+    // 当前开发环境满足所有依赖，doctor 应全部通过
+    const { stdout, status } = runCli(["doctor"], { cwd: PROJECT_ROOT });
+    expect(status).toBe(0);
+    expect(stdout).toContain("Node.js");
+    expect(stdout).toContain("Python");
+    expect(stdout).toContain("Playwright");
+    expect(stdout).toContain("gh");
+    expect(stdout).toContain("config.json");
+  });
+
+  test("在完整环境下输出 🎉 所有检查通过", () => {
+    const { stdout, status } = runCli(["doctor"], { cwd: PROJECT_ROOT });
+    expect(status).toBe(0);
+    expect(stdout).toContain("所有检查通过");
+  });
+
+  test("config.json 缺失时显示警告并提示 --repair", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yida-doctor-noconfig-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"));
+
+    const { stdout, status } = runCli(["doctor"], { cwd: tmpDir });
+    // 有问题时退出码仍为 0（doctor 是诊断命令，不应因环境问题而报错退出）
+    expect(status).toBe(0);
+    expect(stdout).toContain("config.json");
+    expect(stdout).toContain("--repair");
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  test("--repair 在 config.json 缺失时自动创建模板", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yida-doctor-repair-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"));
+
+    const { stdout, status } = runCli(["doctor", "--repair"], { cwd: tmpDir });
+    expect(status).toBe(0);
+    expect(stdout).toContain("已创建 config.json 模板");
+
+    // 验证文件确实被创建
+    const configPath = path.join(tmpDir, "config.json");
+    expect(fs.existsSync(configPath)).toBe(true);
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    expect(config).toHaveProperty("loginUrl");
+    expect(config).toHaveProperty("defaultBaseUrl");
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+});
+
+// ── yida completion 命令测试 ──────────────────────────────────────────
+
+describe("yida completion 命令", () => {
+  test("--help 包含 bash/zsh/fish 说明", () => {
+    const { stdout, status } = runCli(["completion", "--help"]);
+    expect(status).toBe(0);
+    expect(stdout).toContain("bash");
+    expect(stdout).toContain("zsh");
+    expect(stdout).toContain("fish");
+  });
+
+  test("completion bash 输出 bash 补全脚本", () => {
+    const { stdout, status } = runCli(["completion", "bash"]);
+    expect(status).toBe(0);
+    expect(stdout).toContain("_yida_completion");
+    expect(stdout).toContain("complete -F _yida_completion yida");
+    expect(stdout).toContain("login");
+    expect(stdout).toContain("doctor");
+    expect(stdout).toContain("completion");
+  });
+
+  test("completion zsh 输出 zsh 补全脚本", () => {
+    const { stdout, status } = runCli(["completion", "zsh"]);
+    expect(status).toBe(0);
+    expect(stdout).toContain("_yida()");
+    expect(stdout).toContain("compdef _yida yida");
+    expect(stdout).toContain("login:扫码登录宜搭");
+    expect(stdout).toContain("doctor");
+    expect(stdout).toContain("completion");
+  });
+
+  test("completion fish 输出 fish 补全脚本", () => {
+    const { stdout, status } = runCli(["completion", "fish"]);
+    expect(status).toBe(0);
+    expect(stdout).toContain("complete -c yida");
+    expect(stdout).toContain("login");
+    expect(stdout).toContain("doctor");
+    expect(stdout).toContain("completion");
+  });
+
+  test("completion zsh 包含 config 子选项补全", () => {
+    const { stdout } = runCli(["completion", "zsh"]);
+    expect(stdout).toContain("--validate");
+    expect(stdout).toContain("--rollback");
+  });
+
+  test("completion bash 包含 config 子选项补全", () => {
+    const { stdout } = runCli(["completion", "bash"]);
+    expect(stdout).toContain("--validate");
+    expect(stdout).toContain("--rollback");
+  });
+
+  test("不支持的 shell 类型输出错误并以非零退出", () => {
+    const { stderr, status } = runCli(["completion", "powershell"]);
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("不支持的 shell 类型");
+    expect(stderr).toContain("bash | zsh | fish");
+  });
+
+  test("缺少 shell 参数时报错退出", () => {
+    const { stderr, status } = runCli(["completion"]);
+    expect(status).not.toBe(0);
+    expect(stderr).toMatch(/missing required argument/i);
+  });
+});
+
+// ── yida config --validate / --rollback 测试 ─────────────────────────
+
+describe("yida config --validate", () => {
+  test("config.json 格式正确时输出校验通过", () => {
+    const { stdout, status } = runCli(["config", "--validate"], { cwd: PROJECT_ROOT });
+    expect(status).toBe(0);
+    expect(stdout).toContain("校验通过");
+  });
+
+  test("config.json 缺少 loginUrl 时校验失败", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yida-validate-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"));
+    fs.writeFileSync(
+      path.join(tmpDir, "config.json"),
+      JSON.stringify({ defaultBaseUrl: "https://www.aliwork.com" })
+    );
+
+    const { stderr, status } = runCli(["config", "--validate"], { cwd: tmpDir });
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("loginUrl");
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  test("config.json 缺少 defaultBaseUrl 时校验失败", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yida-validate2-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"));
+    fs.writeFileSync(
+      path.join(tmpDir, "config.json"),
+      JSON.stringify({ loginUrl: "https://www.aliwork.com/workPlatform" })
+    );
+
+    const { stderr, status } = runCli(["config", "--validate"], { cwd: tmpDir });
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("defaultBaseUrl");
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  test("config.json 为非法 JSON 时校验失败", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yida-validate3-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"));
+    fs.writeFileSync(path.join(tmpDir, "config.json"), "{ invalid json }");
+
+    const { stderr, status } = runCli(["config", "--validate"], { cwd: tmpDir });
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("JSON");
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  test("config.json 不存在时校验失败", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yida-validate4-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"));
+
+    const { stderr, status } = runCli(["config", "--validate"], { cwd: tmpDir });
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("config.json");
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+});
+
+describe("yida config --rollback", () => {
+  test("备份文件存在时回滚成功", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yida-rollback-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"));
+    fs.mkdirSync(path.join(tmpDir, ".cache"));
+
+    const backupConfig = {
+      loginUrl: "https://www.aliwork.com/workPlatform",
+      defaultBaseUrl: "https://www.aliwork.com",
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, ".cache", "config.backup.json"),
+      JSON.stringify(backupConfig, null, 2)
+    );
+
+    const { stdout, status } = runCli(["config", "--rollback"], { cwd: tmpDir });
+    expect(status).toBe(0);
+    expect(stdout).toContain("已回滚");
+    expect(stdout).toContain("aliwork.com");
+
+    // 验证 config.json 内容与备份一致
+    const restoredConfig = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, "config.json"), "utf-8")
+    );
+    expect(restoredConfig.loginUrl).toBe(backupConfig.loginUrl);
+    expect(restoredConfig.defaultBaseUrl).toBe(backupConfig.defaultBaseUrl);
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  test("备份文件不存在时报错退出", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yida-rollback2-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"));
+
+    const { stderr, status } = runCli(["config", "--rollback"], { cwd: tmpDir });
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("未找到备份配置文件");
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  test("备份文件为非法 JSON 时回滚失败", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yida-rollback3-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"));
+    fs.mkdirSync(path.join(tmpDir, ".cache"));
+    fs.writeFileSync(path.join(tmpDir, ".cache", "config.backup.json"), "{ bad json }");
+
+    const { stderr, status } = runCli(["config", "--rollback"], { cwd: tmpDir });
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("回滚失败");
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  test("运行 config 后自动生成备份文件", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yida-autobackup-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"));
+    fs.writeFileSync(
+      path.join(tmpDir, "config.json"),
+      JSON.stringify({
+        loginUrl: "https://www.aliwork.com/workPlatform",
+        defaultBaseUrl: "https://www.aliwork.com",
+      }, null, 2)
+    );
+
+    runCli(["config"], { cwd: tmpDir });
+
+    // 验证备份文件被自动创建
+    const backupPath = path.join(tmpDir, ".cache", "config.backup.json");
+    expect(fs.existsSync(backupPath)).toBe(true);
+    const backup = JSON.parse(fs.readFileSync(backupPath, "utf-8"));
+    expect(backup.defaultBaseUrl).toBe("https://www.aliwork.com");
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+});
+
+// ── --help 中包含新命令 ───────────────────────────────────────────────
+
+describe("--help 包含新增命令", () => {
+  test("全局 --help 包含 doctor 命令", () => {
+    const { stdout } = runCli(["--help"]);
+    expect(stdout).toContain("doctor");
+    expect(stdout).toContain("检查 OpenYida 环境依赖");
+  });
+
+  test("全局 --help 包含 completion 命令", () => {
+    const { stdout } = runCli(["--help"]);
+    expect(stdout).toContain("completion");
+    expect(stdout).toContain("shell 自动补全");
+  });
+
+  test("全局 --help 中 config 描述包含校验和回滚", () => {
+    const { stdout } = runCli(["config", "--help"]);
+    expect(stdout).toContain("--validate");
+    expect(stdout).toContain("--rollback");
+  });
+});
