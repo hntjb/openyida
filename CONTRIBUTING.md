@@ -19,7 +19,7 @@ cd openyida
 
 # Install dependencies
 pip install playwright && playwright install chromium
-cd .claude/skills/yida-publish/scripts && npm install
+cd .claude/skills/skills/yida-publish-page/scripts && npm install
 ```
 
 ## Submitting Changes
