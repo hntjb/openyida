@@ -48,10 +48,10 @@ function getSkillScript(skillName, scriptFile) {
   if (!fs.existsSync(scriptPath)) {
     console.error(`\n❌ 未找到 skill 脚本：${scriptPath}`);
     console.error(`\n请先运行安装脚本：`);
-    console.error(`  bash install-skills.sh`);
-    console.error(`\n或手动克隆 skills：`);
-    console.error(`  git clone https://github.com/openyida/yida-skills.git .cache/yida-skills`);
-    console.error(`  mv .cache/yida-skills/skills .claude/skills`);
+    console.error(`  Mac/Linux：bash install-skills.sh`);
+    console.error(`  Windows：  .\\install-skills.ps1`);
+    console.error(`\n或通过 git submodule 手动初始化：`);
+    console.error(`  git submodule update --init --recursive`);
     process.exit(1);
   }
 
