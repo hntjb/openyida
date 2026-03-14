@@ -1,0 +1,63 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 用于创建 GitHub Release
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run tests
+      run: npm test
+
+    - name: Verify package version matches tag
+      run: |
+        PKG_VERSION="v$(node -p "require('./package.json').version")"
+        TAG_VERSION="${GITHUB_REF_NAME}"
+        echo "package.json 版本：$PKG_VERSION"
+        echo "Tag 版本：$TAG_VERSION"
+        if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+          echo "❌ package.json 版本（$PKG_VERSION）与 tag（$TAG_VERSION）不一致，请先更新 package.json"
+          exit 1
+        fi
+        echo "✅ 版本一致，准备发布"
+
+    - name: Publish to npm
+      run: npm publish --access public
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: ${{ github.ref_name }}
+        body: |
+          ## 安装
+
+          ```bash
+          npm install -g openyida
+          ```
+
+          ## 更新日志
+
+          请查看 [CHANGELOG](https://github.com/openyida/openyida/commits/main) 了解本版本变更详情。
+        generate_release_notes: true
